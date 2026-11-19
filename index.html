@@ -37,15 +37,36 @@
   f.src = APP_LINK + location.search;
   f.onload = function () { document.getElementById("wait").className = "gone"; };
 
-  // "Call parent" on the medical page: phones ignore a call started inside frames,
-  // so the medical page asks THIS page to make the call.
+  // The medical page sits inside frames, and phones block calls, location and new pages
+  // started from inside frames. So the medical page asks THIS page to do them.
   window.addEventListener("message", function (e) {
     var d = e.data;
-    if (!d || typeof d.adlCall !== "string") return;
+    if (!d || typeof d !== "object") return;
     if (!/(^https:\/\/script\.google\.com$)|(\.googleusercontent\.com$)/.test(e.origin)) return;   // only Google's page
-    if (!/^tel:\+?\d{6,15}$/.test(d.adlCall)) return;                                              // only a phone number
-    try { e.source.postMessage({ adlCallOk: true }, "*"); } catch (x) {}
-    window.location.href = d.adlCall;
+    var reply = function (m) { try { e.source.postMessage(m, "*"); } catch (x) {} };
+
+    // 1. Call parent
+    if (typeof d.adlCall === "string" && /^tel:\+?\d{6,15}$/.test(d.adlCall)) {
+      reply({ adlCallOk: true });
+      window.location.href = d.adlCall;
+    }
+
+    // 2. Lost? Scan me: location (only after the finder tapped the button; the phone asks first)
+    if (d.adlLocate === true) {
+      reply({ adlLocAck: true });
+      if (!navigator.geolocation) { reply({ adlLocErr: "failed" }); return; }
+      navigator.geolocation.getCurrentPosition(function (p) {
+        reply({ adlLoc: { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy } });
+      }, function (err) {
+        reply({ adlLocErr: err && err.code === 1 ? "denied" : "failed" });
+      }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+    }
+
+    // 3. Send the location on WhatsApp (WhatsApp links only)
+    if (typeof d.adlOpen === "string" && /^https:\/\/wa\.me\/\d{6,15}\?text=/.test(d.adlOpen)) {
+      reply({ adlOpenOk: true });
+      if (!window.open(d.adlOpen, "_blank")) window.location.href = d.adlOpen;
+    }
   });
 </script>
 </body>
