@@ -24,18 +24,29 @@
 </head>
 <body>
 <div id="wait"><div><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
-<iframe id="app" title="Shop" allow="clipboard-write"></iframe>
+<iframe id="app" title="Smart Student ID" allow="clipboard-write"></iframe>
 <script>
   /* =========================================================
      ADLINKCARD - Smart Student ID wrapper (hides the Google banner)
-     Paste YOUR shop link (ends with /exec) between the quotes:
+     Your Apps Script web app link (ends with /exec):
      ========================================================= */
-  var SHOP_LINK = "https://script.google.com/macros/s/AKfycbxI-XisTa9d8UY4gV1rHXut54_jsljCxwH_ylc97LeRwhkHtrW9h-s5_aTS-5--4WFF/exec";
+  var APP_LINK = "https://script.google.com/macros/s/AKfycbxI-XisTa9d8UY4gV1rHXut54_jsljCxwH_ylc97LeRwhkHtrW9h-s5_aTS-5--4WFF/exec";
 
-  // ?id=STU0001&key=... (photo) and ?m=STU0001&k=... (medical) are passed on
+  // ?id=CP0001&key=... (photo) and ?m=CP0001&k=... (medical) are passed on
   var f = document.getElementById("app");
-  f.src = SHOP_LINK + location.search;
+  f.src = APP_LINK + location.search;
   f.onload = function () { document.getElementById("wait").className = "gone"; };
+
+  // "Call parent" on the medical page: phones ignore a call started inside frames,
+  // so the medical page asks THIS page to make the call.
+  window.addEventListener("message", function (e) {
+    var d = e.data;
+    if (!d || typeof d.adlCall !== "string") return;
+    if (!/(^https:\/\/script\.google\.com$)|(\.googleusercontent\.com$)/.test(e.origin)) return;   // only Google's page
+    if (!/^tel:\+?\d{6,15}$/.test(d.adlCall)) return;                                              // only a phone number
+    try { e.source.postMessage({ adlCallOk: true }, "*"); } catch (x) {}
+    window.location.href = d.adlCall;
+  });
 </script>
 </body>
 </html>
