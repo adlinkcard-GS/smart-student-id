@@ -32,7 +32,7 @@
      ========================================================= */
   var APP_LINK = "https://script.google.com/macros/s/AKfycbxI-XisTa9d8UY4gV1rHXut54_jsljCxwH_ylc97LeRwhkHtrW9h-s5_aTS-5--4WFF/exec";
 
-  // ?id=CP0001&key=... (photo) and ?m=CP0001&k=... (medical) are passed on
+  // ?id=CP0001&key=... (photo), ?k=...&m=CP0001 (medical / nursery tag) are passed on
   var f = document.getElementById("app");
   f.src = APP_LINK + location.search;
   f.onload = function () { document.getElementById("wait").className = "gone"; };
@@ -66,6 +66,21 @@
     if (typeof d.adlOpen === "string" && /^https:\/\/wa\.me\/\d{6,15}\?text=/.test(d.adlOpen)) {
       reply({ adlOpenOk: true });
       if (!window.open(d.adlOpen, "_blank")) window.location.href = d.adlOpen;
+    }
+
+    // 4. Download the medical PDF (made by Google; phones block downloads inside frames)
+    if (typeof d.adlPdf === "string" && d.adlPdf.length < 15000000 &&
+        typeof d.adlName === "string" && /^[\w\-]{1,60}\.pdf$/.test(d.adlName)) {
+      reply({ adlPdfOk: true });
+      try {
+        var bin = atob(d.adlPdf), arr = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        var url = URL.createObjectURL(new Blob([arr], { type: "application/pdf" }));
+        var a = document.createElement("a");
+        a.href = url; a.download = d.adlName;
+        document.body.appendChild(a); a.click();
+        setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 60000);
+      } catch (x) {}
     }
   });
 </script>
