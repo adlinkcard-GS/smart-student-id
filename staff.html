@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#117A65">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="SafeGarten Staff">
+<title>SafeGarten Staff</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23117A65'/><text x='50' y='68' font-size='54' text-anchor='middle'>🧒</text></svg>">
+<style>
+  :root { --g:#117A65; --navy:#1F3A5F; }
+  html, body { margin:0; height:100%; background:#E7EEF6; font:16px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color:#22303F; }
+  header { background:var(--g); color:#fff; padding:12px 16px calc(12px + env(safe-area-inset-top)) ; display:flex; align-items:center; gap:10px; }
+  header b { font-size:18px; flex:1; }
+  header button { background:transparent; color:#fff; border:1px solid rgba(255,255,255,.6); border-radius:10px; padding:6px 10px; font:inherit; font-size:13px; }
+  .box { max-width:480px; margin:0 auto; padding:16px; }
+  .card { background:#fff; border-radius:16px; padding:18px; text-align:center; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .ar { display:block; font-weight:700; margin-top:2px; }
+  input { width:100%; box-sizing:border-box; font-size:24px; letter-spacing:6px; text-align:center; padding:12px; border:1px solid #C9D6E4; border-radius:12px; margin-top:12px; }
+  .btn { display:block; width:100%; border:0; border-radius:14px; padding:16px; margin-top:12px; font:inherit; font-weight:700; color:#fff; background:var(--g); }
+  .btn.big { font-size:20px; padding:22px; }
+  .btn.grey { background:#64748B; }
+  #cam { position:relative; margin-top:12px; border-radius:16px; overflow:hidden; background:#000; display:none; }
+  #cam video { width:100%; display:block; }
+  #cam .frame { position:absolute; inset:18%; border:4px solid #FAC775; border-radius:14px; }
+  .msg { margin-top:10px; text-align:center; color:#8E1B1B; font-weight:600; min-height:1.2em; }
+  #f { display:none; width:100%; border:0; height:calc(100vh - 60px); background:#E7EEF6; }
+  .hide { display:none !important; }
+  .foot { text-align:center; color:#7A8A9C; font-size:12px; margin-top:16px; }
+</style>
+</head>
+<body>
+<header><b>SafeGarten · Staff</b><button id="pinChange" class="hide" type="button">PIN</button></header>
+
+<!-- 1. Pickup PIN (once a day on this phone) -->
+<div class="box" id="pinBox">
+  <div class="card">
+    <div>Pickup PIN - Code de sortie<span class="ar">رمز الاستلام</span></div>
+    <input id="pin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" aria-label="Pickup PIN">
+    <button class="btn" id="pinOk" type="button">OK</button>
+  </div>
+  <div class="foot">SafeGarten · Powered by ADLINKCARD</div>
+</div>
+
+<!-- 2. Scan the tag -->
+<div class="box hide" id="scanBox">
+  <button class="btn big" id="scanBtn" type="button">📷 Scan the tag - Scanner l'étiquette<span class="ar">امسح بطاقة الطفل</span></button>
+  <div id="cam"><video id="v" playsinline muted></video><div class="frame"></div></div>
+  <button class="btn grey hide" id="stopBtn" type="button">✗</button>
+  <div class="msg" id="msg"></div>
+  <div class="foot">SafeGarten · Powered by ADLINKCARD</div>
+</div>
+
+<!-- 3. The child (Google page) + "next" -->
+<div id="kid" class="hide">
+  <iframe id="f" title="SafeGarten Staff"></iframe>
+</div>
+<div class="box hide" id="nextBox" style="position:fixed;left:0;right:0;bottom:0;padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:rgba(231,238,246,.95)">
+  <button class="btn" id="nextBtn" type="button" style="margin:0">📷 Next child - Enfant suivant · الطفل التالي</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script>
+  /* =========================================================
+     ADLINKCARD - SafeGarten Staff (the teacher's phone)
+     Scans the SAME tag QR (…?k=KEY&m=ID) with the camera, then opens the
+     Google staff page: the child + the people allowed to pick up.
+     Add this page to the phone's home screen (Share / menu > Add to Home screen).
+     ========================================================= */
+  var APP_LINK = "https://script.google.com/macros/s/AKfycbxI-XisTa9d8UY4gV1rHXut54_jsljCxwH_ylc97LeRwhkHtrW9h-s5_aTS-5--4WFF/exec";
+
+  var $ = function (x) { return document.getElementById(x); };
+  var show = function (id, on) { $(id).classList.toggle("hide", !on); };
+  var PIN = "", stream = null, timer = null, det = null;
+  var today = function () { return new Date().toDateString(); };
+  try { var m = JSON.parse(localStorage.getItem("sgStaffPin") || "{}"); if (m.day === today()) PIN = m.pin; } catch (e) {}
+
+  function start() {
+    show("pinBox", !PIN); show("scanBox", !!PIN); show("pinChange", !!PIN);
+    show("kid", false); show("nextBox", false);
+  }
+  $("pinOk").onclick = function () {
+    var v = $("pin").value.trim();
+    if (!/^\d{4,8}$/.test(v)) { $("pin").focus(); return; }
+    PIN = v;
+    try { localStorage.setItem("sgStaffPin", JSON.stringify({ pin: v, day: today() })); } catch (e) {}
+    start(); scan();
+  };
+  $("pin").addEventListener("keydown", function (e) { if (e.key === "Enter") $("pinOk").click(); });
+  $("pinChange").onclick = function () { askPin(); };
+  function askPin() {
+    PIN = ""; try { localStorage.removeItem("sgStaffPin"); } catch (e) {}
+    stopCam(); $("pin").value = ""; start(); $("pin").focus();
+  }
+
+  // ---- camera + QR ----
+  $("scanBtn").onclick = scan;
+  $("stopBtn").onclick = function () { stopCam(); };
+  $("nextBtn").onclick = function () { $("f").src = "about:blank"; start(); scan(); };
+
+  function scan() {
+    $("msg").textContent = "";
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { $("msg").textContent = "Camera not available"; return; }
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false }).then(function (s) {
+      stream = s; $("v").srcObject = s; $("v").play();
+      $("cam").style.display = "block"; show("scanBtn", false); show("stopBtn", true);
+      if ("BarcodeDetector" in window) { try { det = new BarcodeDetector({ formats: ["qr_code"] }); } catch (e) { det = null; } }
+      timer = setInterval(read, 250);
+    }).catch(function () { $("msg").textContent = "Camera: allow it in the browser - Autorisez la caméra · اسمح بالكاميرا"; });
+  }
+  function stopCam() {
+    if (timer) clearInterval(timer); timer = null;
+    if (stream) stream.getTracks().forEach(function (t) { t.stop(); }); stream = null;
+    $("cam").style.display = "none"; show("scanBtn", true); show("stopBtn", false);
+  }
+  var cv = document.createElement("canvas"), cx = cv.getContext("2d", { willReadFrequently: true });
+  var busy = false;
+  function read() {
+    var v = $("v");
+    if (busy || !v.videoWidth) return;
+    busy = true;
+    if (det) {
+      det.detect(v).then(function (r) { busy = false; if (r && r.length) found(r[0].rawValue); })
+                   .catch(function () { busy = false; det = null; });
+      return;
+    }
+    var w = Math.min(640, v.videoWidth), h = Math.round(v.videoHeight * w / v.videoWidth);
+    cv.width = w; cv.height = h; cx.drawImage(v, 0, 0, w, h);
+    var q = window.jsQR ? jsQR(cx.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: "dontInvert" }) : null;
+    busy = false;
+    if (q && q.data) found(q.data);
+  }
+  function found(text) {
+    var m = /[?&]m=([A-Z0-9]{4,12})/i.exec(text), k = /[?&]k=([a-f0-9]{10})/i.exec(text);
+    if (!m || !k) { $("msg").textContent = "Not a SafeGarten tag - Pas une étiquette SafeGarten · ليست بطاقة SafeGarten"; return; }
+    if (navigator.vibrate) navigator.vibrate(80);
+    stopCam();
+    show("scanBox", false); show("kid", true); show("nextBox", true);
+    $("f").style.display = "block";
+    $("f").src = APP_LINK + "?st=1&m=" + encodeURIComponent(m[1].toUpperCase()) + "&k=" + encodeURIComponent(k[1].toLowerCase()) +
+                 "&p=" + encodeURIComponent(PIN);
+  }
+
+  // ---- messages from the Google page ----
+  window.addEventListener("message", function (e) {
+    var d = e.data;
+    if (!d || typeof d !== "object") return;
+    if (!/(^https:\/\/script\.google\.com$)|(\.googleusercontent\.com$)/.test(e.origin)) return;
+    if (typeof d.sgTel === "string" && /^tel:\+?\d{6,15}$/.test(d.sgTel)) window.location.href = d.sgTel;   // call the parent
+    if (d.sgBadPin === true) setTimeout(askPin, 1500);                                              // wrong PIN: ask again
+  });
+
+  start();
+  if (PIN) scan();
+</script>
+</body>
+</html>
